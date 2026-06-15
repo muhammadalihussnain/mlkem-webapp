@@ -1,4 +1,3 @@
-cat > backend/mlkem/params.go << 'EOF'
 package mlkem
 
 import "fmt"
@@ -34,7 +33,7 @@ func NewParams(flavor string) (*Params, error) {
 			Dv: 4,
 
 			PkSize: 800,
-			SkSize: 768,  // Fixed: was 1632
+			SkSize: 768,
 			CtSize: 768,
 		}, nil
 
@@ -51,7 +50,7 @@ func NewParams(flavor string) (*Params, error) {
 			Dv: 4,
 
 			PkSize: 1184,
-			SkSize: 1152,  // Fixed: was 2400
+			SkSize: 1152,
 			CtSize: 1088,
 		}, nil
 
@@ -68,7 +67,7 @@ func NewParams(flavor string) (*Params, error) {
 			Dv: 5,
 
 			PkSize: 1568,
-			SkSize: 1536,  // Fixed: was 3168
+			SkSize: 1536,
 			CtSize: 1568,
 		}, nil
 
@@ -76,4 +75,3 @@ func NewParams(flavor string) (*Params, error) {
 		return nil, fmt.Errorf("invalid ML-KEM flavor: %s", flavor)
 	}
 }
-EOF
