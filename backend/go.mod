@@ -1,7 +1,8 @@
-module github.com/muhammadalihussnain/mlkem-webapp
+module ntt_verification
 
-go 1.22
+go 1.25.0
 
-require golang.org/x/crypto v0.17.0
-
-require golang.org/x/sys v0.15.0 // indirect
+require (
+	golang.org/x/crypto v0.53.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
+)
