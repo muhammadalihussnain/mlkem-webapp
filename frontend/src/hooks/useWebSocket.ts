@@ -64,32 +64,32 @@ export function useWebSocket() {
         case 'params':
           next.params = msg.payload as ParamsPayload;
           next.flavor = (msg.payload as ParamsPayload).flavor;
-          next.currentStep = 1;
+          next.currentStep = 0; // flavor selected — step 1 (rho/sigma) is now active
           break;
 
         case 'rho_sigma':
           next.rhoSigma = msg.payload as RhoSigmaPayload;
-          next.currentStep = 2;
+          next.currentStep = 1;
           break;
 
         case 'matrix_A':
           next.matrixA = msg.payload as MatrixAPayload;
-          next.currentStep = 3;
+          next.currentStep = 2;
           break;
 
         case 'vectors':
           next.vectors = msg.payload as VectorsPayload;
-          next.currentStep = 4;
+          next.currentStep = 3;
           break;
 
         case 't_computed':
           next.tComputed = msg.payload as TComputedPayload;
-          next.currentStep = 5;
+          next.currentStep = 4;
           break;
 
         case 'public_key_sent':
           next.publicKey = msg.payload as PublicKeyPayload;
-          next.currentStep = 6;
+          next.currentStep = 5;
           break;
 
         case 'public_key_recv':
@@ -98,12 +98,12 @@ export function useWebSocket() {
 
         case 'encrypt_result':
           next.encryptResult = msg.payload as EncryptResultPayload;
-          next.currentStep = 7;
+          next.currentStep = 6;
           break;
 
         case 'decrypt_result':
           next.decryptResult = msg.payload as DecryptResultPayload;
-          next.currentStep = 8;
+          next.currentStep = 7;
           break;
 
         case 'reset':

@@ -113,7 +113,7 @@ describe('useWebSocket', () => {
     });
     expect(result.current.state.params).not.toBeNull();
     expect(result.current.state.params?.k).toBe(2);
-    expect(result.current.state.currentStep).toBe(1);
+    expect(result.current.state.currentStep).toBe(0);
   });
 
   it('handles rho_sigma message', () => {
@@ -126,7 +126,7 @@ describe('useWebSocket', () => {
       });
     });
     expect(result.current.state.rhoSigma?.rho).toBe('bb');
-    expect(result.current.state.currentStep).toBe(2);
+    expect(result.current.state.currentStep).toBe(1);
   });
 
   it('handles matrix_A message', () => {
@@ -136,7 +136,7 @@ describe('useWebSocket', () => {
       mockInstance.simulateMessage({ type: 'matrix_A', payload: { k: 2, a: [] } });
     });
     expect(result.current.state.matrixA?.k).toBe(2);
-    expect(result.current.state.currentStep).toBe(3);
+    expect(result.current.state.currentStep).toBe(2);
   });
 
   it('handles vectors message', () => {
@@ -146,7 +146,7 @@ describe('useWebSocket', () => {
       mockInstance.simulateMessage({ type: 'vectors', payload: { k: 2, s: [], e: [] } });
     });
     expect(result.current.state.vectors).not.toBeNull();
-    expect(result.current.state.currentStep).toBe(4);
+    expect(result.current.state.currentStep).toBe(3);
   });
 
   it('handles t_computed message', () => {
@@ -156,7 +156,7 @@ describe('useWebSocket', () => {
       mockInstance.simulateMessage({ type: 't_computed', payload: { k: 2, t: [] } });
     });
     expect(result.current.state.tComputed).not.toBeNull();
-    expect(result.current.state.currentStep).toBe(5);
+    expect(result.current.state.currentStep).toBe(4);
   });
 
   it('handles public_key_sent message', () => {
@@ -166,7 +166,7 @@ describe('useWebSocket', () => {
       mockInstance.simulateMessage({ type: 'public_key_sent', payload: { public_key: 'abc', public_key_size: 800 } });
     });
     expect(result.current.state.publicKey?.public_key_size).toBe(800);
-    expect(result.current.state.currentStep).toBe(6);
+    expect(result.current.state.currentStep).toBe(5);
   });
 
   it('handles public_key_recv message', () => {
@@ -188,7 +188,7 @@ describe('useWebSocket', () => {
       });
     });
     expect(result.current.state.encryptResult?.ciphertext_size).toBe(768);
-    expect(result.current.state.currentStep).toBe(7);
+    expect(result.current.state.currentStep).toBe(6);
   });
 
   it('handles decrypt_result message', () => {
@@ -198,7 +198,7 @@ describe('useWebSocket', () => {
       mockInstance.simulateMessage({ type: 'decrypt_result', payload: { shared_secret: 'ss', match: true } });
     });
     expect(result.current.state.decryptResult?.match).toBe(true);
-    expect(result.current.state.currentStep).toBe(8);
+    expect(result.current.state.currentStep).toBe(7);
   });
 
   it('ignores unknown message types without throwing', () => {
