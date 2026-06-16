@@ -1,8 +1,22 @@
 package mlkem
 
-// Zetas contains precomputed powers of the primitive root 17 in bit-reversed order:
-// Zetas[k] = 17^bitrev7(k) mod 3329
-var Zetas = [128]int32{
+// nttSize is the number of zeta values (N/2) used in the NTT butterfly network.
+const nttSize = N / 2
+
+// nttBaseMulOffset is the index into Zetas where the base-multiplication zetas begin.
+// After 7 NTT layers the last "virtual" layer starts at Zetas[nttBaseMulOffset].
+const nttBaseMulOffset = nttSize / 2
+
+// invN128 is the modular inverse of 128 mod Q: 128 * 3303 ≡ 1 (mod 3329).
+// Applied to every coefficient at the end of NTTInverse to normalise the transform.
+const invN128 int32 = 3303
+
+// Zetas contains precomputed twiddle factors for the NTT, defined in FIPS 203 §4.3:
+//
+//	Zetas[k] = 17^bitrev7(k) mod 3329
+//
+// 17 is a primitive 256th root of unity modulo Q = 3329.
+var Zetas = [nttSize]int32{
 	1, 1729, 2580, 3289, 2642, 630, 1897, 848,
 	1062, 1919, 193, 797, 2786, 3260, 569, 1746,
 	296, 2447, 1339, 1476, 3046, 56, 2240, 1333,
@@ -21,13 +35,14 @@ var Zetas = [128]int32{
 	1722, 1212, 1874, 1029, 2110, 2935, 885, 2154,
 }
 
-// NTTForward performs the in-place forward NTT as defined in FIPS 203 §4.3.
-// Coefficients are reduced modulo Q throughout.
-func NTTForward(poly [256]int32) [256]int32 {
+// NTTForward computes the forward Number Theoretic Transform of poly,
+// as specified in FIPS 203 §4.3 Algorithm 9 (NTT).
+// All arithmetic is performed modulo Q; the result is in NTT domain.
+func NTTForward(poly [N]int32) [N]int32 {
 	f := poly
 	k := 1
-	for length := 128; length >= 2; length >>= 1 {
-		for start := 0; start < 256; start += 2 * length {
+	for length := nttSize; length >= 2; length >>= 1 {
+		for start := 0; start < N; start += 2 * length {
 			zeta := Zetas[k]
 			k++
 			for j := start; j < start+length; j++ {
@@ -40,13 +55,14 @@ func NTTForward(poly [256]int32) [256]int32 {
 	return f
 }
 
-// NTTInverse performs the inverse NTT as defined in FIPS 203 §4.3.
-// After the butterfly network, each coefficient is multiplied by 3303 = 128^-1 mod 3329.
-func NTTInverse(poly [256]int32) [256]int32 {
+// NTTInverse computes the inverse NTT of poly,
+// as specified in FIPS 203 §4.3 Algorithm 10 (NTT^{-1}).
+// Applies the normalisation factor invN128 = 128^{-1} mod Q to each coefficient.
+func NTTInverse(poly [N]int32) [N]int32 {
 	f := poly
-	k := 127
-	for length := 2; length <= 128; length <<= 1 {
-		for start := 0; start < 256; start += 2 * length {
+	k := nttSize - 1
+	for length := 2; length <= nttSize; length <<= 1 {
+		for start := 0; start < N; start += 2 * length {
 			zeta := Zetas[k]
 			k--
 			for j := start; j < start+length; j++ {
@@ -56,20 +72,25 @@ func NTTInverse(poly [256]int32) [256]int32 {
 			}
 		}
 	}
-	// 3303 = 128^{-1} mod 3329
-	const invN int32 = 3303
 	for i := range f {
-		f[i] = mulmod(f[i], invN)
+		f[i] = mulmod(f[i], invN128)
 	}
 	return f
 }
 
 // BaseMul multiplies two degree-1 polynomials in Z_Q[X]/(X^2 - zeta).
-// Operands are pairs (a[2i], a[2i+1]) and (b[2i], b[2i+1]).
-// Result: c0 = a0*b0 + zeta*a1*b1,  c1 = a0*b1 + a1*b0
-func BaseMul(a, b [256]int32, zeta int32) [256]int32 {
-	var r [256]int32
-	for i := 0; i < 128; i++ {
+//
+// Each polynomial is represented as a pair of coefficients:
+//
+//	a = (a[2i], a[2i+1]),  b = (b[2i], b[2i+1])
+//
+// The result satisfies:
+//
+//	c[2i]   = a0*b0 + zeta*a1*b1  (mod Q)
+//	c[2i+1] = a0*b1 + a1*b0       (mod Q)
+func BaseMul(a, b [N]int32, zeta int32) [N]int32 {
+	var r [N]int32
+	for i := 0; i < nttSize; i++ {
 		a0, a1 := a[2*i], a[2*i+1]
 		b0, b1 := b[2*i], b[2*i+1]
 		r[2*i] = addmod(mulmod(a0, b0), mulmod(mulmod(zeta, a1), b1))
@@ -78,25 +99,22 @@ func BaseMul(a, b [256]int32, zeta int32) [256]int32 {
 	return r
 }
 
-// PolyMul multiplies two polynomials using NTT + pointwise BaseMul + INTT.
-// This computes the product in Z_Q[X]/(X^256 + 1).
+// PolyMul multiplies two polynomials in Z_Q[X]/(X^256 + 1) using NTT-based multiplication:
+//  1. Forward NTT both operands.
+//  2. Pointwise multiply each of the 128 coefficient-pairs using BaseMul.
+//  3. Inverse NTT the result.
 //
-// After 7 NTT layers (length 128→2), the 128 coefficient-pairs (f[2i], f[2i+1])
-// each live in Z_Q[X]/(X^2 - zeta_i).  The zeta for pair i comes from the
-// "virtual" 8th layer: zeta_i = Zetas[64 + i/2] with sign controlled by parity,
-// but per FIPS 203 the standard is to use Zetas[64 + i] for i in 0..63 for pairs
-// 0..63, and the negated form for pairs 64..127.  In practice the simplest
-// correct formulation is: pair i uses Zetas[64 + (i >> 1)] with alternating sign,
-// i.e., zeta = (-1)^i * Zetas[64 + (i>>1)].
-func PolyMul(a, b [256]int32) [256]int32 {
+// The zeta for pair i is Zetas[nttBaseMulOffset + i/2], negated for odd i,
+// reflecting the structure of the 8th (virtual) NTT layer.
+func PolyMul(a, b [N]int32) [N]int32 {
 	aHat := NTTForward(a)
 	bHat := NTTForward(b)
 
-	var cHat [256]int32
-	for i := 0; i < 128; i++ {
-		// zeta for pair i: Zetas[64 + i>>1], negated for odd i
-		zeta := Zetas[64+i/2]
+	var cHat [N]int32
+	for i := 0; i < nttSize; i++ {
+		zeta := Zetas[nttBaseMulOffset+i/2]
 		if i%2 == 1 {
+			// Odd pairs use the negated zeta (conjugate factor in the ring).
 			zeta = Q - zeta
 		}
 		a0, a1 := aHat[2*i], aHat[2*i+1]
@@ -108,7 +126,8 @@ func PolyMul(a, b [256]int32) [256]int32 {
 	return NTTInverse(cHat)
 }
 
-// addmod returns (a + b) mod Q, keeping the result in [0, Q).
+// addmod returns (a + b) mod Q in [0, Q).
+// Assumes a, b are already in [0, Q).
 func addmod(a, b int32) int32 {
 	r := a + b
 	if r >= Q {
@@ -117,7 +136,8 @@ func addmod(a, b int32) int32 {
 	return r
 }
 
-// submod returns (a - b) mod Q, keeping the result in [0, Q).
+// submod returns (a - b) mod Q in [0, Q).
+// Assumes a, b are already in [0, Q).
 func submod(a, b int32) int32 {
 	r := a - b
 	if r < 0 {
@@ -126,7 +146,7 @@ func submod(a, b int32) int32 {
 	return r
 }
 
-// mulmod returns (a * b) mod Q using Barrett reduction.
+// mulmod returns (a * b) mod Q via Barrett reduction.
 func mulmod(a, b int32) int32 {
 	return barrettReduce(a * b)
 }
