@@ -137,10 +137,12 @@ func writePump(c *client) {
 // handleMessage dispatches an inbound message to the appropriate step handler.
 func handleMessage(c *client, hub *Hub, sess *session, msg models.InboundMessage) error {
 	switch msg.Type {
-	case "select_flavor":
+	case models.MsgSelectFlavor:
 		return handleSelectFlavor(c, hub, sess, msg.Flavor)
-	case "step_next":
+	case models.MsgStepNext:
 		return handleStepNext(c, hub, sess, msg.Step)
+	case models.MsgSendMessage:
+		return handleSendMessage(hub, sess)
 	default:
 		return nil // unknown types are silently ignored
 	}
@@ -347,6 +349,44 @@ func stepSendPublicKey(hub *Hub, sess *session) error {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+
+// handleSendMessage runs Encapsulate on the current public key, then immediately
+// runs Decapsulate on the server side and broadcasts both results.
+// This demonstrates the full encrypt → decrypt round-trip in one step.
+func handleSendMessage(hub *Hub, sess *session) error {
+	if sess.result == nil || len(sess.result.PublicKey) == 0 {
+		return errorf("public key not yet available; complete key generation first")
+	}
+
+	enc, err := mlkem.Encapsulate(sess.result.PublicKey, sess.params)
+	if err != nil {
+		return errorf("encapsulate failed: " + err.Error())
+	}
+
+	hub.Broadcast(mustMarshal(models.OutboundMessage{
+		Type: models.TypeEncryptResult,
+		Payload: models.EncryptResultPayload{
+			Ciphertext:     hex.EncodeToString(enc.Ciphertext),
+			CiphertextSize: len(enc.Ciphertext),
+			SharedSecret:   hex.EncodeToString(enc.SharedSecret),
+			Message:        hex.EncodeToString(enc.Message),
+		},
+	}))
+
+	ss, err := mlkem.Decapsulate(sess.result.PrivateKey, enc.Ciphertext, sess.result.PublicKey, sess.params)
+	if err != nil {
+		return errorf("decapsulate failed: " + err.Error())
+	}
+
+	hub.Broadcast(mustMarshal(models.OutboundMessage{
+		Type: models.TypeDecryptResult,
+		Payload: models.DecryptResultPayload{
+			SharedSecret: hex.EncodeToString(ss),
+			Match:        mlkem.ConstantTimeEqual(enc.SharedSecret, ss),
+		},
+	}))
+	return nil
+}
 
 // sendError sends a TypeError message directly to a single client (not broadcast).
 func sendError(c *client, msg string) {

@@ -563,3 +563,107 @@ func TestHubUnregisterIdempotent(t *testing.T) {
 		t.Errorf("count after double-unregister: want 0 got %d", hub.ClientCount())
 	}
 }
+
+// runFullKeyGen runs the complete key-generation sequence on a connection and
+// returns when the private key has been received. It consumes all expected messages.
+func runFullKeyGen(t *testing.T, conn *websocket.Conn, flavor string) {
+	t.Helper()
+	steps := []struct {
+		msg  models.InboundMessage
+		want string
+	}{
+		{inbound(models.MsgSelectFlavor, flavor, ""), models.TypeParams},
+		{inbound(models.MsgStepNext, "", models.StepGenerateRhoSigma), models.TypeRhoSigma},
+		{inbound(models.MsgStepNext, "", models.StepGenerateMatrixA), models.TypeMatrixA},
+		{inbound(models.MsgStepNext, "", models.StepGenerateVectors), models.TypeVectors},
+		{inbound(models.MsgStepNext, "", models.StepComputeT), models.TypeTComputed},
+		{inbound(models.MsgStepNext, "", models.StepSendPublicKey), models.TypePublicKeySent},
+	}
+	for _, s := range steps {
+		send(t, conn, s.msg)
+		msg := recv(t, conn)
+		if msg.Type != s.want {
+			t.Fatalf("keygen step %q: want %q got %q", s.msg.Step, s.want, msg.Type)
+		}
+	}
+	// Consume the public_key_recv message.
+	extra := recv(t, conn)
+	if extra.Type != models.TypePublicKeyRecv {
+		t.Fatalf("expected %q got %q", models.TypePublicKeyRecv, extra.Type)
+	}
+}
+
+// TestSendMessageEncapsDecaps verifies the full encrypt → decrypt round-trip
+// over the WebSocket for all three ML-KEM parameter sets.
+func TestSendMessageEncapsDecaps(t *testing.T) {
+	for _, flavor := range []string{models.Flavor512, models.Flavor768, models.Flavor1024} {
+		t.Run(flavor, func(t *testing.T) {
+			srv, conn := testServer(t)
+			defer srv.Close()
+			defer conn.Close()
+
+			runFullKeyGen(t, conn, flavor)
+
+			send(t, conn, models.InboundMessage{Type: models.MsgSendMessage})
+
+			encMsg := recv(t, conn)
+			if encMsg.Type != models.TypeEncryptResult {
+				t.Fatalf("want %q got %q", models.TypeEncryptResult, encMsg.Type)
+			}
+			var ep models.EncryptResultPayload
+			payloadAs(t, encMsg, &ep)
+			if len(ep.Ciphertext) == 0 {
+				t.Error("ciphertext is empty")
+			}
+			if len(ep.SharedSecret) != 64 { // 32 bytes → 64 hex chars
+				t.Errorf("shared secret hex length: want 64 got %d", len(ep.SharedSecret))
+			}
+
+			decMsg := recv(t, conn)
+			if decMsg.Type != models.TypeDecryptResult {
+				t.Fatalf("want %q got %q", models.TypeDecryptResult, decMsg.Type)
+			}
+			var dp models.DecryptResultPayload
+			payloadAs(t, decMsg, &dp)
+			if !dp.Match {
+				t.Errorf("shared secrets do not match: encaps=%s decaps=%s",
+					ep.SharedSecret, dp.SharedSecret)
+			}
+			if ep.SharedSecret != dp.SharedSecret {
+				t.Errorf("shared secret mismatch: encaps=%s decaps=%s",
+					ep.SharedSecret, dp.SharedSecret)
+			}
+		})
+	}
+}
+
+// TestSendMessageWithoutPublicKey verifies that send_message before key generation
+// returns an error.
+func TestSendMessageWithoutPublicKey(t *testing.T) {
+	srv, conn := testServer(t)
+	defer srv.Close()
+	defer conn.Close()
+
+	send(t, conn, inbound(models.MsgSelectFlavor, models.Flavor512, ""))
+	recv(t, conn)
+
+	send(t, conn, models.InboundMessage{Type: models.MsgSendMessage})
+	msg := recv(t, conn)
+	if msg.Type != models.TypeError {
+		t.Fatalf("want %q got %q", models.TypeError, msg.Type)
+	}
+}
+
+// TestSendMessageWithoutSession verifies send_message returns error when no session result.
+func TestSendMessageWithoutSession(t *testing.T) {
+	srv, conn := testServer(t)
+	defer srv.Close()
+	defer conn.Close()
+
+	// No flavor selected at all.
+	send(t, conn, models.InboundMessage{Type: models.MsgSendMessage})
+	msg := recv(t, conn)
+	if msg.Type != models.TypeError {
+		t.Fatalf("want %q got %q", models.TypeError, msg.Type)
+	}
+}

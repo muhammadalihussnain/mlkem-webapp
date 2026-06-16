@@ -5,20 +5,17 @@ package models
 // ── Inbound messages (frontend → backend) ─────────────────────────────────────
 
 // InboundMessage is the envelope for every message sent by the frontend.
-// The Type field determines which payload field is populated.
 type InboundMessage struct {
-	// Type is the message discriminator. Valid values:
+	// Type is the message discriminator.
 	//   "select_flavor"  — choose an ML-KEM security level
 	//   "step_next"      — advance to the next key-generation step
+	//   "send_message"   — trigger encapsulation + decapsulation
 	Type string `json:"type"`
 
 	// Flavor is populated when Type == "select_flavor".
-	// Valid values: "512", "768", "1024".
 	Flavor string `json:"flavor,omitempty"`
 
 	// Step is populated when Type == "step_next".
-	// Valid values: "generate_rho_sigma", "generate_matrix_A",
-	//               "generate_vectors", "compute_t", "send_public_key".
 	Step string `json:"step,omitempty"`
 }
 
@@ -26,11 +23,7 @@ type InboundMessage struct {
 
 // OutboundMessage is the envelope for every message sent by the backend.
 type OutboundMessage struct {
-	// Type identifies the message kind. Matches one of the OutboundType* constants.
-	Type string `json:"type"`
-
-	// Payload carries the message body. Exactly one of the Payload* fields below
-	// is non-nil for a given Type; the rest are omitted from JSON.
+	Type    string      `json:"type"`
 	Payload interface{} `json:"payload"`
 }
 
@@ -53,58 +46,60 @@ type ParamsPayload struct {
 
 // RhoSigmaPayload is sent after the G(seed) step.
 type RhoSigmaPayload struct {
-	// Seed is the 32-byte input seed encoded as a hex string.
-	Seed string `json:"seed"`
-	// Rho is the 32-byte public matrix seed, hex-encoded.
-	Rho string `json:"rho"`
-	// Sigma is the 32-byte secret/noise seed, hex-encoded.
-	Sigma string `json:"sigma"`
+	Seed  string `json:"seed"`  // hex-encoded 32 bytes
+	Rho   string `json:"rho"`   // hex-encoded 32 bytes
+	Sigma string `json:"sigma"` // hex-encoded 32 bytes
 }
 
 // MatrixAPayload is sent after GenerateMatrixA.
-// Only the first K×K entries are meaningful; the rest are zeroed.
 type MatrixAPayload struct {
-	// K is the matrix dimension used.
-	K int `json:"k"`
-	// A holds the NTT-domain matrix coefficients as a 4×4 array of 256-element slices.
+	K int          `json:"k"`
 	A [4][4][]int32 `json:"a"`
 }
 
-// ByteStreamPayload is sent to visualise the raw PRF output bytes before CBD decoding.
+// ByteStreamPayload is sent to visualise raw PRF output bytes.
 type ByteStreamPayload struct {
-	// Label identifies which byte stream this is (e.g. "s_0", "e_2").
 	Label string `json:"label"`
-	// Bytes is the raw PRF output, hex-encoded.
-	Bytes string `json:"bytes"`
+	Bytes string `json:"bytes"` // hex-encoded
 }
 
 // VectorsPayload is sent after GenerateSecretAndError.
 type VectorsPayload struct {
-	K int       `json:"k"`
+	K int        `json:"k"`
 	S [4][]int32 `json:"s"`
 	E [4][]int32 `json:"e"`
 }
 
-// TComputedPayload is sent after the t = A·s + e computation.
+// TComputedPayload is sent after t = A·s + e.
 type TComputedPayload struct {
-	K int       `json:"k"`
+	K int        `json:"k"`
 	T [4][]int32 `json:"t"`
 }
 
 // PublicKeyPayload is sent after public key encoding.
 type PublicKeyPayload struct {
-	// PublicKey is the encoded pk bytes, hex-encoded.
-	PublicKey string `json:"public_key"`
-	// PublicKeySize is the byte length of the encoded public key.
-	PublicKeySize int `json:"public_key_size"`
+	PublicKey     string `json:"public_key"`      // hex-encoded
+	PublicKeySize int    `json:"public_key_size"` // bytes
 }
 
 // PrivateKeyPayload is sent alongside the public key.
 type PrivateKeyPayload struct {
-	// PrivateKey is the encoded sk bytes, hex-encoded.
-	PrivateKey string `json:"private_key"`
-	// PrivateKeySize is the byte length of the encoded private key.
-	PrivateKeySize int `json:"private_key_size"`
+	PrivateKey     string `json:"private_key"`      // hex-encoded
+	PrivateKeySize int    `json:"private_key_size"` // bytes
+}
+
+// EncryptResultPayload is sent after Encapsulate completes.
+type EncryptResultPayload struct {
+	Ciphertext     string `json:"ciphertext"`      // hex-encoded
+	CiphertextSize int    `json:"ciphertext_size"` // bytes
+	SharedSecret   string `json:"shared_secret"`   // hex-encoded
+	Message        string `json:"message"`         // hex-encoded random plaintext
+}
+
+// DecryptResultPayload is sent after Decapsulate completes.
+type DecryptResultPayload struct {
+	SharedSecret string `json:"shared_secret"` // hex-encoded
+	Match        bool   `json:"match"`         // true iff encaps and decaps secrets agree
 }
 
 // ErrorPayload wraps a human-readable error message for the frontend.
@@ -114,7 +109,6 @@ type ErrorPayload struct {
 
 // ── Outbound message type constants ───────────────────────────────────────────
 
-// Outbound type discriminator strings sent in OutboundMessage.Type.
 const (
 	TypeParams        = "params"
 	TypeRhoSigma      = "rho_sigma"
@@ -124,12 +118,21 @@ const (
 	TypeTComputed     = "t_computed"
 	TypePublicKeySent = "public_key_sent"
 	TypePublicKeyRecv = "public_key_recv"
+	TypeEncryptResult = "encrypt_result"
+	TypeDecryptResult = "decrypt_result"
 	TypeError         = "error"
+)
+
+// ── Inbound message type constants ────────────────────────────────────────────
+
+const (
+	MsgSelectFlavor = "select_flavor"
+	MsgStepNext     = "step_next"
+	MsgSendMessage  = "send_message"
 )
 
 // ── Inbound step name constants ────────────────────────────────────────────────
 
-// Step name strings used in InboundMessage.Step.
 const (
 	StepGenerateRhoSigma = "generate_rho_sigma"
 	StepGenerateMatrixA  = "generate_matrix_A"
@@ -138,9 +141,8 @@ const (
 	StepSendPublicKey    = "send_public_key"
 )
 
-// ── ML-KEM flavor constants (mirrored from mlkem package for protocol use) ─────
+// ── ML-KEM flavor constants ────────────────────────────────────────────────────
 
-// Supported ML-KEM flavor strings used in InboundMessage.Flavor.
 const (
 	Flavor512  = "512"
 	Flavor768  = "768"
