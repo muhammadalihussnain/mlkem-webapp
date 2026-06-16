@@ -157,11 +157,50 @@ func TestBaseMul(t *testing.T) {
 }
 
 func TestBarrettReduce(t *testing.T) {
-	cases := [][2]int32{{0, 0}, {3328, 3328}, {3329, 0}, {3330, 1}, {6658, 0}, {-1, 3328}}
+	cases := [][2]int32{{0, 0}, {3328, 3328}, {3329, 0}, {3330, 1}, {6658, 0}, {-1, 3328}, {-3329, 0}}
 	for _, c := range cases {
 		got := barrettReduce(c[0])
 		if got != c[1] {
 			t.Errorf("barrettReduce(%d) = %d, want %d", c[0], got, c[1])
+		}
+	}
+}
+
+// TestPolyToBytesBytesToPoly verifies the round-trip encode/decode.
+func TestPolyToBytesBytesToPoly(t *testing.T) {
+	r := rand.New(rand.NewSource(13))
+	for trial := 0; trial < 10; trial++ {
+		var poly [256]int32
+		for i := range poly {
+			poly[i] = int32(r.Intn(4096)) // 12-bit values
+		}
+		bytes := PolyToBytes(poly)
+		if len(bytes) != 384 {
+			t.Fatalf("PolyToBytes length = %d, want 384", len(bytes))
+		}
+		recovered := BytesToPoly(bytes)
+		for i := range poly {
+			if poly[i] != recovered[i] {
+				t.Fatalf("trial %d index %d: want %d got %d", trial, i, poly[i], recovered[i])
+			}
+		}
+	}
+}
+
+// TestMulMontgomery exercises the mulMontgomery helper.
+func TestMulMontgomery(t *testing.T) {
+	cases := [][3]int32{
+		{0, 0, 0},
+		{1, 1, 1},
+		{2, 3, 6},
+		{3328, 1, 3328},
+		{3329, 1, 0}, // 3329 ≡ 0 mod Q
+		{100, 200, (100 * 200) % 3329},
+	}
+	for _, c := range cases {
+		got := mulMontgomery(c[0], c[1])
+		if got != c[2] {
+			t.Errorf("mulMontgomery(%d, %d) = %d, want %d", c[0], c[1], got, c[2])
 		}
 	}
 }
