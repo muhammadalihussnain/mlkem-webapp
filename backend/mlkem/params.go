@@ -2,76 +2,63 @@ package mlkem
 
 import "fmt"
 
+// Params holds the full set of ML-KEM parameters for a given security level.
+// All field values are derived from FIPS 203 Table 1 and Table 2.
 type Params struct {
-	N     int
-	Q     int
-	K     int
-	Eta1  int
-	Eta2  int
+	// N is the polynomial degree (always 256 for ML-KEM).
+	N int
+	// Q is the NTT prime modulus (always 3329 for ML-KEM).
+	Q int
+	// K is the module rank (2, 3, or 4).
+	K int
+	// Eta1 is the noise width for key generation sampling.
+	Eta1 int
+	// Eta2 is the noise width for encapsulation sampling.
+	Eta2 int
+	// Delta is the rounding constant used in compression.
 	Delta int
-
-	Du     int
-	Dv     int
+	// Du is the bit-width for compressing ciphertext vector u.
+	Du int
+	// Dv is the bit-width for compressing ciphertext scalar v.
+	Dv int
+	// PkSize is the public key size in bytes.
 	PkSize int
+	// SkSize is the secret key size in bytes.
 	SkSize int
+	// CtSize is the ciphertext size in bytes.
 	CtSize int
 }
 
+// NewParams returns the Params for the given ML-KEM flavor (Flavor512, Flavor768,
+// or Flavor1024). Returns an error for unrecognised flavors.
 func NewParams(flavor string) (*Params, error) {
 	switch flavor {
-
-	case "512":
+	case Flavor512:
 		return &Params{
-			N:     256,
-			Q:     3329,
-			K:     2,
-			Eta1:  3,
-			Eta2:  2,
-			Delta: 1 << 12,
-
-			Du: 10,
-			Dv: 4,
-
-			PkSize: 800,
-			SkSize: 768,
-			CtSize: 768,
+			N: N, Q: int(Q), K: k512,
+			Eta1: eta1_512, Eta2: eta2, Delta: delta,
+			Du: du512, Dv: dv512,
+			PkSize: pkSize512, SkSize: skSize512, CtSize: ctSize512,
 		}, nil
 
-	case "768":
+	case Flavor768:
 		return &Params{
-			N:     256,
-			Q:     3329,
-			K:     3,
-			Eta1:  2,
-			Eta2:  2,
-			Delta: 1 << 12,
-
-			Du: 10,
-			Dv: 4,
-
-			PkSize: 1184,
-			SkSize: 1152,
-			CtSize: 1088,
+			N: N, Q: int(Q), K: k768,
+			Eta1: eta1_768, Eta2: eta2, Delta: delta,
+			Du: du768, Dv: dv768,
+			PkSize: pkSize768, SkSize: skSize768, CtSize: ctSize768,
 		}, nil
 
-	case "1024":
+	case Flavor1024:
 		return &Params{
-			N:     256,
-			Q:     3329,
-			K:     4,
-			Eta1:  2,
-			Eta2:  2,
-			Delta: 1 << 12,
-
-			Du: 11,
-			Dv: 5,
-
-			PkSize: 1568,
-			SkSize: 1536,
-			CtSize: 1568,
+			N: N, Q: int(Q), K: k1024,
+			Eta1: eta1_1024, Eta2: eta2, Delta: delta,
+			Du: du1024, Dv: dv1024,
+			PkSize: pkSize1024, SkSize: skSize1024, CtSize: ctSize1024,
 		}, nil
 
 	default:
-		return nil, fmt.Errorf("invalid ML-KEM flavor: %s", flavor)
+		return nil, fmt.Errorf("invalid ML-KEM flavor %q: expected one of %q, %q, %q",
+			flavor, Flavor512, Flavor768, Flavor1024)
 	}
 }
