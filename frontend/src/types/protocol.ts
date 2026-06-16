@@ -14,7 +14,11 @@ export interface SendMessageMsg {
   type: 'send_message';
 }
 
-export type OutgoingMessage = SelectFlavorMessage | StepNextMessage | SendMessageMsg;
+export interface ResetMessage {
+  type: 'reset';
+}
+
+export type OutgoingMessage = SelectFlavorMessage | StepNextMessage | SendMessageMsg | ResetMessage;
 
 // ── Backend payload shapes (inside OutboundMessage.payload) ───────────────────
 

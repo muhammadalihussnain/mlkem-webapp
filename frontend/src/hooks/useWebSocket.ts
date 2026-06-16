@@ -106,6 +106,10 @@ export function useWebSocket() {
           next.currentStep = 8;
           break;
 
+        case 'reset':
+          // Server-side reset — return to initial state (preserves connection).
+          return { ...INITIAL_STATE, events: [...prev.events] };
+
         // 'error' and unknown types are logged but don't mutate state.
       }
 

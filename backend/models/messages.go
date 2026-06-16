@@ -10,6 +10,7 @@ type InboundMessage struct {
 	//   "select_flavor"  — choose an ML-KEM security level
 	//   "step_next"      — advance to the next key-generation step
 	//   "send_message"   — trigger encapsulation + decapsulation
+	//   "reset"          — clear all state, return to flavor selection
 	Type string `json:"type"`
 
 	// Flavor is populated when Type == "select_flavor".
@@ -120,6 +121,7 @@ const (
 	TypePublicKeyRecv = "public_key_recv"
 	TypeEncryptResult = "encrypt_result"
 	TypeDecryptResult = "decrypt_result"
+	TypeReset         = "reset"
 	TypeError         = "error"
 )
 
@@ -129,6 +131,7 @@ const (
 	MsgSelectFlavor = "select_flavor"
 	MsgStepNext     = "step_next"
 	MsgSendMessage  = "send_message"
+	MsgReset        = "reset"
 )
 
 // ── Inbound step name constants ────────────────────────────────────────────────

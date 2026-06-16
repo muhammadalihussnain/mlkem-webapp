@@ -31,21 +31,25 @@ func New(cfg Config) *http.Server {
 		cfg.Addr = defaultAddr
 	}
 
+	return &http.Server{
+		Addr:    cfg.Addr,
+		Handler: NewHandler(cfg),
+	}
+}
+
+// NewHandler builds and returns only the http.Handler (mux), without wrapping
+// it in an http.Server. Useful for httptest.NewServer in integration tests.
+func NewHandler(cfg Config) http.Handler {
 	hub := ws.NewHub()
 	mux := http.NewServeMux()
 
-	// WebSocket endpoint.
 	mux.HandleFunc(wsPath, ws.Handler(hub))
 
-	// Static frontend files — served only when a directory is configured.
 	if cfg.StaticDir != "" {
 		mux.Handle("/", http.FileServer(http.Dir(cfg.StaticDir)))
 	}
 
-	return &http.Server{
-		Addr:    cfg.Addr,
-		Handler: mux,
-	}
+	return mux
 }
 
 // ListenAndServe starts the server and blocks until it exits.

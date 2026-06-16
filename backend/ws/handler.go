@@ -143,6 +143,8 @@ func handleMessage(c *client, hub *Hub, sess *session, msg models.InboundMessage
 		return handleStepNext(c, hub, sess, msg.Step)
 	case models.MsgSendMessage:
 		return handleSendMessage(hub, sess)
+	case models.MsgReset:
+		return handleReset(hub, sess)
 	default:
 		return nil // unknown types are silently ignored
 	}
@@ -384,6 +386,18 @@ func handleSendMessage(hub *Hub, sess *session) error {
 			SharedSecret: hex.EncodeToString(ss),
 			Match:        mlkem.ConstantTimeEqual(enc.SharedSecret, ss),
 		},
+	}))
+	return nil
+}
+
+// handleReset clears all session state and broadcasts a reset acknowledgement
+// so all connected clients can return to the flavor-selection step.
+func handleReset(hub *Hub, sess *session) error {
+	sess.params = nil
+	sess.result = nil
+	hub.Broadcast(mustMarshal(models.OutboundMessage{
+		Type:    models.TypeReset,
+		Payload: struct{}{},
 	}))
 	return nil
 }

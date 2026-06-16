@@ -26,6 +26,11 @@ function App() {
     sendMessage({ type: 'send_message' });
   };
 
+  const handleReset = () => {
+    sendMessage({ type: 'reset' });
+    resetState();
+  };
+
   return (
     <div className="app">
       <header className="app__header">
@@ -34,7 +39,7 @@ function App() {
           <span aria-label={`connection status: ${isConnected ? 'connected' : 'disconnected'}`}>
             {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
           </span>
-          <button type="button" onClick={resetState} className="app__reset">
+          <button type="button" onClick={handleReset} className="app__reset">
             Reset
           </button>
         </div>
