@@ -1,4 +1,5 @@
 name: CI
+
 on:
   push:
     branches: ["**"]
@@ -6,40 +7,76 @@ on:
     branches: ["**"]
 
 jobs:
+  # ── Backend unit + integration tests ─────────────────────────────────────────
   backend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
-        with: { go-version: "1.22" }
-      - name: Test + Coverage
-        run: |
-          cd backend
-          go mod download
-          go test ./mlkem/... -coverprofile=coverage.out -covermode=atomic
-          go tool cover -func=coverage.out
-      - name: Upload coverage to Codecov
+        with:
+          go-version: "1.25"
+
+      - name: Download modules
+        run: go mod download
+        working-directory: backend
+
+      - name: Unit tests + coverage
+        run: go test ./mlkem/... ./ws/... -coverprofile=coverage.out -covermode=atomic
+        working-directory: backend
+
+      - name: Coverage report
+        run: go tool cover -func=coverage.out
+        working-directory: backend
+
+      - name: Integration tests
+        run: go test -tags=integration ./integration/... -v
+        working-directory: backend
+
+      - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:
           files: ./backend/coverage.out
           flags: backend
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  # ── Frontend unit tests ───────────────────────────────────────────────────────
   frontend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
-        with: { node-version: "20" }
+        with:
+          node-version: "20"
+
       - name: Install dependencies
         run: npm ci
         working-directory: frontend
-      - name: Run tests
-        run: npm test
+
+      - name: Lint
+        run: npm run lint
         working-directory: frontend
-      - name: Upload coverage to Codecov
+
+      - name: Test + coverage
+        run: npm run test:coverage
+        working-directory: frontend
+
+      - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:
           files: ./frontend/coverage/lcov.info
           flags: frontend
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  # ── Docker build smoke test ───────────────────────────────────────────────────
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t mlkem-backend ./backend
+
+      - name: Build frontend image
+        run: docker build -t mlkem-frontend ./frontend
