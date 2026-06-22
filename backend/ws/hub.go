@@ -3,8 +3,6 @@
 package ws
 
 import (
-	"sync"
-
 	"github.com/gorilla/websocket"
 )
 
@@ -14,54 +12,88 @@ type client struct {
 	send chan []byte
 }
 
-// Hub maintains the set of active WebSocket clients and coordinates broadcasts.
-// It is safe for concurrent use.
-type Hub struct {
-	mu      sync.RWMutex
-	clients map[*client]struct{}
+// hubCmd is an internal command sent to the hub's run loop.
+type hubCmd struct {
+	kind     hubCmdKind
+	c        *client
+	msg      []byte
+	replyCh  chan int // used by clientCount
 }
 
-// NewHub returns an initialised, empty Hub.
+type hubCmdKind int
+
+const (
+	cmdRegister hubCmdKind = iota
+	cmdUnregister
+	cmdBroadcast
+	cmdClientCount
+)
+
+// Hub maintains the set of active WebSocket clients and coordinates broadcasts.
+// All mutations happen in a single goroutine (run) to eliminate data races.
+type Hub struct {
+	cmds chan hubCmd
+	done chan struct{}
+}
+
+// NewHub returns an initialised Hub and starts its internal run loop.
 func NewHub() *Hub {
-	return &Hub{
-		clients: make(map[*client]struct{}),
+	h := &Hub{
+		cmds: make(chan hubCmd, 256),
+		done: make(chan struct{}),
 	}
+	go h.run()
+	return h
+}
+
+// run is the Hub's single-writer goroutine. All client map mutations happen here.
+func (h *Hub) run() {
+	clients := make(map[*client]struct{})
+	for cmd := range h.cmds {
+		switch cmd.kind {
+		case cmdRegister:
+			clients[cmd.c] = struct{}{}
+
+		case cmdUnregister:
+			if _, ok := clients[cmd.c]; ok {
+				delete(clients, cmd.c)
+				close(cmd.c.send)
+			}
+
+		case cmdBroadcast:
+			for c := range clients {
+				select {
+				case c.send <- cmd.msg:
+				default:
+					// Client is too slow — drop rather than block the broadcaster.
+				}
+			}
+
+		case cmdClientCount:
+			cmd.replyCh <- len(clients)
+		}
+	}
+	close(h.done)
 }
 
 // register adds c to the set of active clients.
 func (h *Hub) register(c *client) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.clients[c] = struct{}{}
+	h.cmds <- hubCmd{kind: cmdRegister, c: c}
 }
 
 // unregister removes c from the set of active clients and closes its send channel.
 func (h *Hub) unregister(c *client) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if _, ok := h.clients[c]; ok {
-		delete(h.clients, c)
-		close(c.send)
-	}
+	h.cmds <- hubCmd{kind: cmdUnregister, c: c}
 }
 
 // Broadcast sends msg to every currently registered client.
-// Clients whose send buffer is full are silently skipped to avoid blocking.
 func (h *Hub) Broadcast(msg []byte) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	for c := range h.clients {
-		select {
-		case c.send <- msg:
-		default:
-			// Drop the message for this client rather than blocking the broadcaster.
-		}
-	}
+	h.cmds <- hubCmd{kind: cmdBroadcast, msg: msg}
 }
 
 // ClientCount returns the number of currently registered clients.
 func (h *Hub) ClientCount() int {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return len(h.clients)
+	replyCh := make(chan int, 1)
+	h.cmds <- hubCmd{kind: cmdClientCount, replyCh: replyCh}
+	return <-replyCh
 }
