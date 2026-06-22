@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
+import type {
   AppState,
   DecryptResultPayload,
   EncryptResultPayload,
@@ -41,6 +41,10 @@ export function useWebSocket() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Guards against duplicate disconnect/error log entries per connection lifecycle.
+  const disconnectLoggedRef = useRef(false);
+  // Prevents reconnect attempts after the component unmounts.
+  const stoppedRef = useRef(false);
 
   // ── Event log helper ───────────────────────────────────────────────────────
 
@@ -132,12 +136,14 @@ export function useWebSocket() {
 
   const connect = useCallback(() => {
     if (wsRef.current) return; // already connecting or connected
+    if (stoppedRef.current) return; // unmounted — do not reconnect
 
     try {
       const ws = new WebSocket(WS_URL);
       wsRef.current = ws;
 
       ws.onopen = () => {
+        disconnectLoggedRef.current = false; // reset for new connection lifecycle
         setIsConnected(true);
         addEvent('connected', {});
       };
@@ -155,13 +161,22 @@ export function useWebSocket() {
       ws.onclose = () => {
         setIsConnected(false);
         wsRef.current = null;
-        addEvent('disconnected', {});
-        reconnectRef.current = setTimeout(connect, RECONNECT_DELAY_MS);
+        // Only log once — onerror may have already logged the disconnect.
+        if (!disconnectLoggedRef.current) {
+          disconnectLoggedRef.current = true;
+          addEvent('disconnected', {});
+        }
+        // Only schedule reconnect if we haven't been intentionally stopped.
+        if (!stoppedRef.current) {
+          reconnectRef.current = setTimeout(connect, RECONNECT_DELAY_MS);
+        }
       };
 
       ws.onerror = () => {
-        // onclose fires after onerror; no extra state update needed.
+        // Always emit an 'error' event — tests assert on this type.
+        // Mark disconnect as logged so onclose won't double-emit 'disconnected'.
         addEvent('error', {});
+        disconnectLoggedRef.current = true;
       };
     } catch (err) {
       console.error('ws: connect failed', err);
@@ -169,6 +184,7 @@ export function useWebSocket() {
   }, [addEvent, handleMessage]);
 
   const disconnect = useCallback(() => {
+    stoppedRef.current = true; // prevent any further reconnect attempts
     if (reconnectRef.current) {
       clearTimeout(reconnectRef.current);
       reconnectRef.current = null;

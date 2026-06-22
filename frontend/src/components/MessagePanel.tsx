@@ -1,32 +1,16 @@
-import React from 'react';
-import { EncryptResultPayload, DecryptResultPayload } from '../types/protocol';
+import type { EncryptResultPayload, DecryptResultPayload } from '../types/protocol';
 
-/** Number of hex characters to preview for ciphertext. */
-const CT_PREVIEW_LEN = 48;
+const GLITTER = ['✦', '✧', '✶', '✸', '✺', '❋', '✵', '✴'];
+const rng = (seed: string, i: number) => GLITTER[(seed.charCodeAt(i % seed.length) + i) % GLITTER.length];
 
 interface MessagePanelProps {
-  /** Called when the user clicks "Encrypt & Exchange". */
   onSendMessage: () => void;
   encryptResult: EncryptResultPayload | null;
   decryptResult: DecryptResultPayload | null;
-  /** Disabled when keys are not yet available or not connected. */
   disabled: boolean;
 }
 
-/**
- * MessagePanel triggers the encapsulate → decapsulate round-trip and displays
- * the resulting ciphertext, shared secrets, and whether they match.
- *
- * Note: ML-KEM does not encrypt arbitrary plaintext — it encapsulates a random
- * shared secret.  The "message" field shown here is the random value embedded
- * in the ciphertext, not user-supplied text.
- */
-export function MessagePanel({
-  onSendMessage,
-  encryptResult,
-  decryptResult,
-  disabled,
-}: MessagePanelProps) {
+export function MessagePanel({ onSendMessage, encryptResult, decryptResult, disabled }: MessagePanelProps) {
   return (
     <div className="message-panel" aria-label="key exchange panel">
       <button
@@ -36,20 +20,39 @@ export function MessagePanel({
         disabled={disabled}
         aria-label="run encapsulation and decapsulation"
       >
-        🔐 Encapsulate &amp; Decapsulate
+        Encapsulate &amp; Decapsulate
       </button>
 
       {encryptResult && (
         <section className="message-panel__result" aria-label="encapsulation result">
-          <h4>Encapsulation</h4>
-          <dl>
-            <dt>Ciphertext ({encryptResult.ciphertext_size} B)</dt>
-            <dd className="message-panel__hex" title={encryptResult.ciphertext}>
-              {encryptResult.ciphertext.slice(0, CT_PREVIEW_LEN)}…
-            </dd>
-            <dt>Shared secret (encapsulator)</dt>
-            <dd className="message-panel__hex">{encryptResult.shared_secret}</dd>
-          </dl>
+          <h4>Encapsulation Result</h4>
+
+          {/* Ciphertext with glitter display */}
+          <div className="cipher-box" aria-label="ciphertext">
+            <div className="cipher-box__header">
+              <span className="cipher-box__title">Ciphertext</span>
+              <span className="cipher-box__size">{encryptResult.ciphertext_size} bytes</span>
+            </div>
+            <div className="cipher-box__glitter" aria-hidden="true">
+              {Array.from({ length: 12 }, (_, i) => (
+                <span key={i} className="cipher-box__star"
+                  style={{ animationDelay: `${i * 0.18}s`, left: `${(i * 8.3) % 100}%` }}>
+                  {rng(encryptResult.ciphertext, i)}
+                </span>
+              ))}
+            </div>
+            <div className="cipher-box__hex" title={encryptResult.ciphertext}>
+              {encryptResult.ciphertext.slice(0, 64)}…
+            </div>
+            <div className="cipher-box__footer">
+              {rng(encryptResult.ciphertext, 0)} Encapsulated shared secret &middot; {encryptResult.ciphertext_size} bytes
+            </div>
+          </div>
+
+          <div className="message-panel__secret">
+            <span className="message-panel__secret-label">Shared secret (encapsulator)</span>
+            <span className="message-panel__hex">{encryptResult.shared_secret}</span>
+          </div>
         </section>
       )}
 
@@ -58,15 +61,15 @@ export function MessagePanel({
           className={`message-panel__result message-panel__result--${decryptResult.match ? 'ok' : 'fail'}`}
           aria-label="decapsulation result"
         >
-          <h4>Decapsulation</h4>
-          <dl>
-            <dt>Shared secret (decapsulator)</dt>
-            <dd className="message-panel__hex">{decryptResult.shared_secret}</dd>
-            <dt>Match</dt>
-            <dd aria-label={`secrets match: ${decryptResult.match}`}>
-              {decryptResult.match ? '✅ Secrets match' : '❌ Mismatch'}
-            </dd>
-          </dl>
+          <h4>Decapsulation Result</h4>
+          <div className="message-panel__secret">
+            <span className="message-panel__secret-label">Shared secret (decapsulator)</span>
+            <span className="message-panel__hex">{decryptResult.shared_secret}</span>
+          </div>
+          <div className={`message-panel__match message-panel__match--${decryptResult.match ? 'ok' : 'fail'}`}
+            aria-label={`secrets match: ${decryptResult.match}`}>
+            {decryptResult.match ? '✅ Secrets match — key exchange successful!' : '❌ Mismatch — something went wrong.'}
+          </div>
         </section>
       )}
     </div>
