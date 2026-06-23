@@ -1,10 +1,17 @@
 package main
 
-import "ntt_verification/server"
+import (
+	"os"
+
+	"ntt_verification/server"
+)
 
 func main() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 	server.ListenAndServe(server.Config{
-		Addr:      ":8080",
-		StaticDir: "../frontend/dist",
+		Addr: ":" + port,
 	})
 }

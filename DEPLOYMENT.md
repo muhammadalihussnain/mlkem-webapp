@@ -34,7 +34,7 @@ internally — only **port 3000** needs to be exposed to the network.
 # Ubuntu / Debian
 sudo apt-get update
 sudo apt-get install -y ca-certificates curl
-sudo install -m 0755 -d /etc/apt/keyrings
+sudo install -m 0755 -d /etc/apt/keyri5421` W
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
   | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \

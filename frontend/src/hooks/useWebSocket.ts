@@ -14,8 +14,10 @@ import type {
   WsMessage,
 } from '../types/protocol';
 
-/** WebSocket endpoint — proxied by Vite in dev, direct in production. */
-const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`;
+/** WebSocket endpoint — uses VITE_WS_URL env var if set (production),
+ *  otherwise falls back to relative host (dev / same-origin nginx proxy). */
+const WS_URL = import.meta.env.VITE_WS_URL ||
+  `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`;
 
 /** How long to wait before attempting a reconnect (ms). */
 const RECONNECT_DELAY_MS = 3000;

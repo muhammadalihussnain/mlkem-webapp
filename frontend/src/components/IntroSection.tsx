@@ -57,19 +57,19 @@ const ANALOGIES = [
 const VARIANTS = [
   {
     name: 'ML-KEM-512',
-    level: 'Level 1 — equivalent to AES-128',
+    level: 'Level 1-equivalent to AES-128',
     desc: 'Smallest key and ciphertext sizes. Suitable for most applications and constrained environments.',
     ek: '800 bytes', dk: '1632 bytes',
   },
   {
     name: 'ML-KEM-768',
-    level: 'Level 3 — equivalent to AES-192',
+    level: 'Level 3-equivalent to AES-192',
     desc: 'Balanced security and performance. The recommended default for general-purpose use by NIST.',
     ek: '1184 bytes', dk: '2400 bytes',
   },
   {
     name: 'ML-KEM-1024',
-    level: 'Level 5 — equivalent to AES-256',
+    level: 'Level 5-equivalent to AES-256',
     desc: 'Highest security margin. Largest keys. For long-term sensitive data and high-assurance systems.',
     ek: '1568 bytes', dk: '3168 bytes',
   },
